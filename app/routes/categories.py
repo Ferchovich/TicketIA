@@ -14,7 +14,6 @@ from app.utils.exceptions import (
     NotFoundError,
     DatabaseError,
     ConflictError,
-    ValidationError,
 )
 
 logger = logging.getLogger(__name__)
