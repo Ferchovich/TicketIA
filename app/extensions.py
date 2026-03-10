@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_supabase_client():
-    """Get Supabase client instance. Returns None if not configured."""
+    """Get Supabase client instance. Returns None if initialization fails (e.g. missing or invalid credentials)."""
     try:
         from supabase import create_client, Client
         from app.config import get_settings
