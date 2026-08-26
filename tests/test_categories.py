@@ -71,6 +71,34 @@ async def test_create_category_missing_name(client):
     assert data["success"] is False
 
 
+async def test_list_categories_includes_stats(client):
+    """GET /api/categories should include ticket_count and total_amount per category."""
+    cat_id = str(uuid.uuid4())
+    fake_category = {
+        "id": cat_id,
+        "name": "Alimentación",
+        "description": "Gastos en comida",
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z",
+    }
+    mock_client = MagicMock()
+    categories_result = MagicMock(data=[fake_category])
+    mock_client.table.return_value.select.return_value.order.return_value.execute.return_value = categories_result
+    tickets_result = MagicMock(data=[
+        {"category_id": cat_id, "importe_total": 100.0},
+        {"category_id": cat_id, "importe_total": 50.5},
+    ])
+    mock_client.table.return_value.select.return_value.execute.return_value = tickets_result
+
+    with patch("app.routes.categories.get_supabase_client", return_value=mock_client):
+        response = await client.get("/api/categories")
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["success"] is True
+    assert data["data"][0]["ticket_count"] == 2
+    assert data["data"][0]["total_amount"] == 150.5
+
+
 async def test_create_category_empty_name(client):
     """POST /api/categories with empty name should fail with 422."""
     response = await client.post("/api/categories", json={"name": ""})

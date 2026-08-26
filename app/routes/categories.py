@@ -33,7 +33,7 @@ async def list_categories():
     """List all categories."""
     try:
         repo = _get_repo()
-        categories = await repo.find_all()
+        categories = await repo.find_all_with_stats()
         return success_response(data=categories, message=f"Found {len(categories)} categories")
     except DatabaseError as exc:
         return error_response(exc.message, status_code=exc.status_code)

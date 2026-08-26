@@ -116,3 +116,54 @@ async def test_list_tickets(client):
     data = await response.get_json()
     assert data["success"] is True
     assert "pagination" in data
+
+
+async def test_get_ticket_includes_raw_text(client):
+    """GET /api/tickets/<id> should include raw_text from ticket_raw_texts."""
+    ticket_id = str(uuid.uuid4())
+    fake_ticket = {"id": ticket_id, "razon_social": "TEST SRL", "status": "saved"}
+    fake_raw_text = {"ticket_id": ticket_id, "raw_text": "TOTAL: $100", "created_at": "2024-01-01T00:00:00Z"}
+
+    mock_client = MagicMock()
+    ticket_result = MagicMock(data=fake_ticket)
+    mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value = ticket_result
+    raw_text_result = MagicMock(data=[fake_raw_text])
+    mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.limit.return_value.execute.return_value = raw_text_result
+
+    with patch("app.routes.tickets.get_supabase_client", return_value=mock_client):
+        response = await client.get(f"/api/tickets/{ticket_id}")
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["success"] is True
+    assert data["data"]["raw_text"] == "TOTAL: $100"
+
+
+async def test_delete_ticket(client):
+    """DELETE /api/tickets/<id> should remove the ticket."""
+    ticket_id = str(uuid.uuid4())
+    mock_client = MagicMock()
+    result = MagicMock(data=[{"id": ticket_id}])
+    mock_client.table.return_value.delete.return_value.eq.return_value.execute.return_value = result
+
+    with patch("app.routes.tickets.get_supabase_client", return_value=mock_client):
+        response = await client.delete(f"/api/tickets/{ticket_id}")
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["success"] is True
+
+
+async def test_get_ticket_logs(client):
+    """GET /api/tickets/<id>/logs should return the audit trail."""
+    ticket_id = str(uuid.uuid4())
+    fake_logs = [{"id": str(uuid.uuid4()), "ticket_id": ticket_id, "stage": "save", "success": True}]
+    mock_client = MagicMock()
+    result = MagicMock(data=fake_logs)
+    mock_client.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = result
+
+    with patch("app.routes.tickets.get_supabase_client", return_value=mock_client):
+        response = await client.get(f"/api/tickets/{ticket_id}/logs")
+    assert response.status_code == 200
+    data = await response.get_json()
+    assert data["success"] is True
+    assert isinstance(data["data"], list)
+    assert len(data["data"]) == 1

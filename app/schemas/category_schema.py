@@ -37,3 +37,5 @@ class CategoryOut(BaseModel):
     description: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
+    ticket_count: int = 0
+    total_amount: float = 0

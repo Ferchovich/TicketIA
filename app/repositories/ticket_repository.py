@@ -88,6 +88,37 @@ class TicketRepository:
             logger.error("Error updating ticket %s: %s", ticket_id, exc)
             raise DatabaseError(f"Failed to update ticket: {exc}") from exc
 
+    async def delete(self, ticket_id: str) -> bool:
+        try:
+            result = (
+                self._client.table("tickets")
+                .delete()
+                .eq("id", ticket_id)
+                .execute()
+            )
+            if not result.data:
+                raise NotFoundError(f"Ticket {ticket_id} not found")
+            return True
+        except NotFoundError:
+            raise
+        except Exception as exc:
+            logger.error("Error deleting ticket %s: %s", ticket_id, exc)
+            raise DatabaseError(f"Failed to delete ticket: {exc}") from exc
+
+    async def find_logs(self, ticket_id: str) -> list[dict]:
+        try:
+            result = (
+                self._client.table("ticket_extraction_logs")
+                .select("*")
+                .eq("ticket_id", ticket_id)
+                .order("created_at")
+                .execute()
+            )
+            return result.data or []
+        except Exception as exc:
+            logger.error("Error fetching logs for ticket %s: %s", ticket_id, exc)
+            raise DatabaseError(f"Failed to fetch ticket logs: {exc}") from exc
+
     async def log_extraction(self, data: dict) -> dict:
         try:
             result = (

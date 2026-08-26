@@ -18,6 +18,36 @@ class CategoryRepository:
             logger.error("Error fetching categories: %s", exc)
             raise DatabaseError(f"Failed to fetch categories: {exc}") from exc
 
+    async def find_all_with_stats(self) -> list[dict]:
+        """Fetch all categories plus ticket_count/total_amount aggregated from tickets."""
+        categories = await self.find_all()
+        try:
+            result = (
+                self._client.table("tickets")
+                .select("category_id,importe_total")
+                .execute()
+            )
+            rows = result.data or []
+        except Exception as exc:
+            logger.error("Error fetching tickets for category stats: %s", exc)
+            raise DatabaseError(f"Failed to fetch category stats: {exc}") from exc
+
+        stats: dict[str, dict] = {}
+        for row in rows:
+            cat_id = row.get("category_id")
+            if not cat_id:
+                continue
+            entry = stats.setdefault(cat_id, {"count": 0, "total": 0.0})
+            entry["count"] += 1
+            entry["total"] += float(row.get("importe_total") or 0)
+
+        for category in categories:
+            entry = stats.get(category["id"], {"count": 0, "total": 0.0})
+            category["ticket_count"] = entry["count"]
+            category["total_amount"] = entry["total"]
+
+        return categories
+
     async def find_by_id(self, category_id: str) -> dict:
         try:
             result = (

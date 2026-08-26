@@ -7,6 +7,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from app.extensions import get_supabase_client
 from app.repositories.ticket_repository import TicketRepository
+from app.repositories.raw_document_repository import RawDocumentRepository
 from app.schemas.ticket_schema import TicketCreate, TicketUpdate, TicketListFilters
 from app.services.image_preprocessing_service import validate_file, preprocess_image
 from app.services.ticket_extraction_service import extract_from_image
@@ -38,6 +39,13 @@ def _get_storage_service():
     if client is None:
         raise DatabaseError("Database connection is not available")
     return TicketStorageService(client)
+
+
+def _get_raw_document_repo():
+    client = get_supabase_client()
+    if client is None:
+        raise DatabaseError("Database connection is not available")
+    return RawDocumentRepository(client)
 
 
 @tickets_bp.post("/tickets/analyze")
@@ -146,10 +154,13 @@ async def list_tickets():
 
 @tickets_bp.get("/tickets/<ticket_id>")
 async def get_ticket(ticket_id: str):
-    """Get full ticket detail."""
+    """Get full ticket detail, including its raw OCR text if available."""
     try:
         repo = _get_ticket_repo()
         ticket = await repo.find_by_id(ticket_id)
+        raw_doc_repo = _get_raw_document_repo()
+        raw_text_row = await raw_doc_repo.find_raw_text_by_ticket(ticket_id)
+        ticket["raw_text"] = raw_text_row.get("raw_text") if raw_text_row else None
         return success_response(data=ticket, message="Ticket found")
     except NotFoundError as exc:
         return error_response(exc.message, status_code=exc.status_code)
@@ -157,6 +168,36 @@ async def get_ticket(ticket_id: str):
         return error_response(exc.message, status_code=exc.status_code)
     except Exception as exc:
         logger.exception("Unexpected error fetching ticket %s", ticket_id)
+        return error_response("Internal server error", status_code=500)
+
+
+@tickets_bp.delete("/tickets/<ticket_id>")
+async def delete_ticket(ticket_id: str):
+    """Delete a ticket."""
+    try:
+        repo = _get_ticket_repo()
+        await repo.delete(ticket_id)
+        return success_response(data=None, message="Ticket deleted")
+    except NotFoundError as exc:
+        return error_response(exc.message, status_code=exc.status_code)
+    except DatabaseError as exc:
+        return error_response(exc.message, status_code=exc.status_code)
+    except Exception as exc:
+        logger.exception("Unexpected error deleting ticket %s", ticket_id)
+        return error_response("Internal server error", status_code=500)
+
+
+@tickets_bp.get("/tickets/<ticket_id>/logs")
+async def get_ticket_logs(ticket_id: str):
+    """Get the audit trail (extraction logs) for a ticket."""
+    try:
+        repo = _get_ticket_repo()
+        logs = await repo.find_logs(ticket_id)
+        return success_response(data=logs, message="Ticket logs found")
+    except DatabaseError as exc:
+        return error_response(exc.message, status_code=exc.status_code)
+    except Exception as exc:
+        logger.exception("Unexpected error fetching logs for ticket %s", ticket_id)
         return error_response("Internal server error", status_code=500)
 
 
